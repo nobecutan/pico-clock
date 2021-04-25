@@ -1,0 +1,16 @@
+{
+    "python.linting.enabled": true,
+    "python.analysis.typeshedPaths": [
+        ".vscode/Pico-Stub"
+    ],
+    "python.languageServer": "Pylance",
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.extraPaths": [
+        ".vscode/Pico-Stub/stubs",
+        "lib",
+    ],
+    "python.linting.pylintEnabled": false,
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportMissingModuleSource": "none"
+    },
+}
