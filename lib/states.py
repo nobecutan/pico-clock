@@ -7,6 +7,7 @@ from drivers.display import Display
 from gui.core.writer import Writer
 from gui.widgets.textbox import Textbox
 from rotary import Event
+from DS1302 import DS1302
 
 DEFAULT_TIMEOUT = 15000
 
@@ -111,9 +112,10 @@ class _TimeState(_State):
 
 
 class Init(_State):
-    def __init__(self, display: Display, clock_data: ClockData) -> None:
+    def __init__(self, display: Display, clock_data: ClockData, rtc:DS1302) -> None:
         super().__init__(display, clock_data)
 
+        self._rtc = rtc
         self._is_drawn = False
 
 
@@ -126,6 +128,7 @@ class Init(_State):
 
 
     def init(self) -> str:
+        self._clock_data.is_init = self._clock_data.from_rtc(self._rtc.DateTime())
         if self._clock_data.is_init:
             return "Normal"
         return "SetHour10"
@@ -137,12 +140,16 @@ class Init(_State):
 
 
 class Normal(_TimeState):
-    def __init__(self, display: Display, clock_data: ClockData) -> None:
+    def __init__(self, display: Display, clock_data: ClockData, rtc:DS1302) -> None:
         super().__init__(display, clock_data)
+
+        self._rtc = rtc
+
 
     def initState(self, reset_timer_callback: FunctionType) -> None:
         super().initState(reset_timer_callback)
         self._prev_display_data.day = -1 # Force display update at least once
+        self._clock_data.from_rtc(self._rtc.DateTime())
 
 
     def prepareView(self) -> bool:

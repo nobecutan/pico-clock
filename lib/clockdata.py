@@ -1,4 +1,5 @@
 
+
 class ClockData:
     _WEEKDAY_STR = ("So", "Mo", "Di", "Mi", "Do", "Fr", "Sa")
     _MONTH_STR = ("", "Jan", "Feb", "Mar", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez")
@@ -12,13 +13,26 @@ class ClockData:
         self.weekday = 1
         self.hour = 0
         self.minute = 0
+        self.second = 0
         self.temperature = None
         self.pressure = None
         self.battery = 100
         self.t1_duration = 0
         self.t2_duration = 0
         self.t3_duration = 0
-        self.is_init = True
+        self.is_init = False
+
+    def from_rtc(self, rtc_tuple:Tuple[int, int, int, int, int, int, int]) -> bool:
+        self.year = rtc_tuple[0]
+        self.month = rtc_tuple[1]
+        self.day = rtc_tuple[2]
+        self.weekday = rtc_tuple[3]
+        self.hour = rtc_tuple[4]
+        self.minute = rtc_tuple[5]
+        self.second = rtc_tuple[6]
+        self.is_init = self.year >= 2020
+        return self.is_init
+
 
 
     def calc_weekday(self) -> None:

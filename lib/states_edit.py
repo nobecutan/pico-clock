@@ -1,12 +1,26 @@
+import utime
+from machine import Pin
 from micropython import const
+import micropython
 
 from clockdata import ClockData
 from drivers.display import Display
 from gui.widgets.textbox import Textbox
 from rotary import Event
+from DS1302 import DS1302
 
 import states
 
+
+motor = Pin(0, Pin.OUT)
+
+def _do_buzz(time_ms:int) -> None:
+    motor.on()
+    utime.sleep_ms(time_ms)
+    motor.off()
+
+def buzz(time_ms:int = 125) -> None:
+    micropython.schedule(_do_buzz, time_ms)
 
 class _EditTimeState(states._TimeState):
     def __init__(self, display: Display, clock_data: ClockData, timeout_ms: int = 0, timeout_state_name: str = None) -> None:
@@ -92,17 +106,22 @@ class SetHour10(_EditTimeState):
             self._h10 -= 1
             if self._h10 < 0:
                 self._h10 = 0
+            else:
+                buzz()
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_ROT_INC:
             self._h10 += 1
             if self._h10 > 2:
                 self._h10 = 2
+            else:
+                buzz()
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_BTN_CLICK:
             self._clock_data.hour = self._h10 * 10 + self._h1
             if self._clock_data.hour > 23:
                 self._clock_data.hour = 23
             self._reset_timer_callback()
+            buzz()
             return "SetHour1"
 
         return self.__class__.__name__
@@ -133,17 +152,22 @@ class SetHour1(_EditTimeState):
             self._h1 -= 1
             if self._h1 < 0:
                 self._h1 = 0
+            else:
+                buzz()
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_ROT_INC:
             self._h1 += 1
             h_max = 3 if self._h10 == 2 else 9
             if self._h1 > h_max:
                 self._h1 = h_max
+            else:
+                buzz()
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_BTN_CLICK:
             self._clock_data.hour = self._h10 * 10 + self._h1
 
             self._reset_timer_callback()
+            buzz()
             return "SetMinute10"
 
         return self.__class__.__name__
@@ -173,16 +197,21 @@ class SetMinute10(_EditTimeState):
             self._m10 -= 1
             if self._m10 < 0:
                 self._m10 = 0
+            else:
+                buzz()
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_ROT_INC:
             self._m10 += 1
             if self._m10 > 5:
                 self._m10 = 5
+            else:
+                buzz()
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_BTN_CLICK:
             self._clock_data.minute = self._m10 * 10 + self._m1
 
             self._reset_timer_callback()
+            buzz()
             return "SetMinute1"
 
         return self.__class__.__name__
@@ -220,16 +249,21 @@ class SetMinute1(_EditTimeState):
             self._m1 -= 1
             if self._m1 < 0:
                 self._m1 = 0
+            else:
+                buzz()
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_ROT_INC:
             self._m1 += 1
             if self._m1 > 9:
                 self._m1 = 9
+            else:
+                buzz()
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_BTN_CLICK:
             self._clock_data.minute = self._m10 * 10 + self._m1
 
             self._reset_timer_callback()
+            buzz()
             return "SetYear"
 
         return self.__class__.__name__
@@ -271,14 +305,19 @@ class SetYear(_EditTimeState):
             cd.year -= 1
             if cd.year < 2020:
                 cd.year = 2020
+            else:
+                buzz()
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_ROT_INC:
             cd.year += 1
             if cd.year > 2096:
                 cd.year = 2096
+            else:
+                buzz()
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_BTN_CLICK:
             self._reset_timer_callback()
+            buzz()
             return "SetMonth"
 
         return self.__class__.__name__
@@ -318,14 +357,19 @@ class SetMonth(_EditTimeState):
             cd.month -= 1
             if cd.month < 1:
                 cd.month = 1
+            else:
+                buzz()
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_ROT_INC:
             cd.month += 1
             if cd.month > 12:
                 cd.month = 12
+            else:
+                buzz()
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_BTN_CLICK:
             self._reset_timer_callback()
+            buzz()
             return "SetDay"
 
         return self.__class__.__name__
@@ -336,11 +380,13 @@ class SetMonth(_EditTimeState):
 
 
 class SetDay(_EditTimeState):
-    def __init__(self, display: Display, clock_data: ClockData) -> None:
+    def __init__(self, display: Display, clock_data: ClockData, rtc: DS1302) -> None:
         if clock_data.is_init:
             super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
         else:
             super().__init__(display, clock_data)
+
+        self._rtc = rtc
 
     def initState(self, reset_timer_callback: FunctionType) -> None:
         super().initState(reset_timer_callback)
@@ -387,17 +433,23 @@ class SetDay(_EditTimeState):
             cd.day -= 1
             if cd.day < 1:
                 cd.day = 1
+            else:
+                buzz()
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_ROT_INC:
             cd.day += 1
             if cd.day > self._d_max:
                 cd.day = self._d_max
+            else:
+                buzz()
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_BTN_CLICK:
             cd.calc_weekday()
             cd.is_init = True
 
             self._reset_timer_callback()
+            self._rtc.DateTime((cd.year, cd.month, cd.day, cd.weekday, cd.hour, cd.minute, 0))
+            buzz()
             return "Normal"
 
         return self.__class__.__name__
