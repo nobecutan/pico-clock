@@ -123,7 +123,7 @@ class EPD(framebuf.FrameBuffer):
         cmd(b'\x4F', b'\xC7\x00')  # set RAM y address count to 199;
 
         self.wait_until_ready()
-        print('Init Done.')
+        # print('Init Done.')
 
 
 

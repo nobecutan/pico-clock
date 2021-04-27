@@ -38,6 +38,7 @@ class _EditTimeState(states._TimeState):
         self._footer_y = self._date_y + self._wri_default.char_height + 1
         self._footer_height = self._display.height - self._footer_y
 
+
     def initState(self, reset_timer_callback: FunctionType) -> None:
         super().initState(reset_timer_callback)
         cd = self._clock_data
@@ -77,6 +78,52 @@ class _EditTimeState(states._TimeState):
 
 
 
+class _EditCountdownState(states._CountdownState):
+    def __init__(self, display: Display, clock_data: ClockData, timeout_ms: int = 0, timeout_state_name: str = None) -> None:
+        super().__init__(display, clock_data, timeout_ms, timeout_state_name)
+        self._m10 = -1
+        self._m1 = -1
+        self._s10 = -1
+        self._s1 = -1
+        self._prev_m10 = -1
+        self._prev_m1 = -1
+        self._prev_s10 = -1
+        self._prev_s1 = -1
+
+
+    def _set_timer_val(self, min: int, sec: int) -> int:
+        cd = self._clock_data
+        timer_val = min * 60 + sec
+        if cd.active_timer == 1:
+            cd.t1_duration = timer_val
+        elif cd.active_timer == 2:
+            cd.t2_duration = timer_val
+        elif cd.active_timer == 3:
+            cd.t3_duration = timer_val
+        else:
+            raise IndexError("active timer {:d} unsupported".format(cd.active_timer))
+
+        return timer_val
+
+
+    def initState(self, reset_timer_callback: FunctionType) -> None:
+        super().initState(reset_timer_callback)
+
+        cd = self._clock_data
+        minute, second = self._get_timer_val()
+        self._m10 = self._timer_min // 10
+        self._m1 = self._timer_min % 10
+        self._s10 = self._timer_sec // 10
+        self._s1 = self._timer_sec % 10
+
+
+    def handleTimeout(self) -> None:
+        if self._clock_data.timer_min_backup > 0 \
+            and self._clock_data.timer_sec_backup > 0:
+            self._set_timer_val(self._clock_data.timer_min_backup, self._clock_data.timer_sec_backup)
+
+        self._clock_data.timer_min_backup = 0
+        self._clock_data.timer_sec_backup = 0
 
 
 
@@ -84,10 +131,7 @@ class _EditTimeState(states._TimeState):
 
 class SetHour10(_EditTimeState):
     def __init__(self, display: Display, clock_data: ClockData) -> None:
-        if clock_data.is_init:
-            super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
-        else:
-            super().__init__(display, clock_data)
+        super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
 
 
     def prepareView(self) -> bool:
@@ -129,10 +173,7 @@ class SetHour10(_EditTimeState):
 
 class SetHour1(_EditTimeState):
     def __init__(self, display: Display, clock_data: ClockData) -> None:
-        if clock_data.is_init:
-            super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
-        else:
-            super().__init__(display, clock_data)
+        super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
 
 
     def prepareView(self) -> bool:
@@ -173,12 +214,10 @@ class SetHour1(_EditTimeState):
         return self.__class__.__name__
 
 
+
 class SetMinute10(_EditTimeState):
     def __init__(self, display: Display, clock_data: ClockData) -> None:
-        if clock_data.is_init:
-            super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
-        else:
-            super().__init__(display, clock_data)
+        super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
 
 
     def prepareView(self) -> bool:
@@ -220,13 +259,9 @@ class SetMinute10(_EditTimeState):
 
 
 
-
 class SetMinute1(_EditTimeState):
     def __init__(self, display: Display, clock_data: ClockData) -> None:
-        if clock_data.is_init:
-            super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
-        else:
-            super().__init__(display, clock_data)
+        super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
 
         self._m10 = clock_data.minute // 10
         self._m1 = clock_data.minute % 10
@@ -277,10 +312,7 @@ class SetMinute1(_EditTimeState):
 
 class SetYear(_EditTimeState):
     def __init__(self, display: Display, clock_data: ClockData) -> None:
-        if clock_data.is_init:
-            super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
-        else:
-            super().__init__(display, clock_data)
+        super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
 
 
     def prepareView(self) -> bool:
@@ -325,14 +357,9 @@ class SetYear(_EditTimeState):
 
 
 
-
-
 class SetMonth(_EditTimeState):
     def __init__(self, display: Display, clock_data: ClockData) -> None:
-        if clock_data.is_init:
-            super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
-        else:
-            super().__init__(display, clock_data)
+        super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
 
 
     def prepareView(self) -> bool:
@@ -378,13 +405,9 @@ class SetMonth(_EditTimeState):
 
 
 
-
 class SetDay(_EditTimeState):
     def __init__(self, display: Display, clock_data: ClockData, rtc: DS1302) -> None:
-        if clock_data.is_init:
-            super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
-        else:
-            super().__init__(display, clock_data)
+        super().__init__(display, clock_data, states.DEFAULT_TIMEOUT, "Normal")
 
         self._rtc = rtc
 
@@ -453,3 +476,210 @@ class SetDay(_EditTimeState):
             return "Normal"
 
         return self.__class__.__name__
+
+
+
+
+
+
+
+
+class TimerSetMinute10(_EditCountdownState):
+    def __init__(self, display: Display, clock_data: ClockData) -> None:
+        super().__init__(display, clock_data)
+
+
+    def initState(self, reset_timer_callback: FunctionType) -> None:
+        super().initState(reset_timer_callback)
+        self._clock_data.timer_min_backup = self._timer_min
+        self._clock_data.timer_sec_backup = self._timer_sec
+
+    def prepareView(self) -> bool:
+        has_changes = super().prepareView()
+        tb = Textbox(self._wri_time, self._time_y, self._hour_start_x,
+                     self._wri_time.stringlen(str(self._m10)), 1)
+        tb.append(str(self._m10))
+        if self._prev_m10 != self._m10:
+            self._prev_m10 = self._m10
+            has_changes = True
+        return has_changes
+
+
+    def processEvent(self, event: Event) -> str:
+        if event.event_type == Event.EVENT_ROT_DEC:
+            self._m10 -= 1
+            if self._m10 < 0:
+                self._m10 = 5
+            buzz()
+            self._reset_timer_callback()
+        elif event.event_type == Event.EVENT_ROT_INC:
+            self._m10 += 1
+            if self._m10 > 5:
+                self._m10 = 0
+            buzz()
+            self._reset_timer_callback()
+        elif event.event_type == Event.EVENT_BTN_LONG_CLICK:
+            buzz()
+            return "Timer{}Select".format(self._clock_data.active_timer)
+        elif event.event_type == Event.EVENT_BTN_CLICK:
+            self._timer_min = self._m10 * 10 + self._m1
+            self._set_timer_val(self._timer_min, self._timer_sec)
+
+            self._reset_timer_callback()
+            buzz()
+            return "TimerSetMinute1"
+
+        return self.__class__.__name__
+
+
+
+
+
+
+class TimerSetMinute1(_EditCountdownState):
+    def __init__(self, display: Display, clock_data: ClockData) -> None:
+        super().__init__(display, clock_data)
+
+
+    def prepareView(self) -> bool:
+        has_changes = super().prepareView()
+        tb = Textbox(self._wri_time, self._time_y, self._hour_start_x + self._wri_time.stringlen(str(self._m10)),
+                     self._wri_time.stringlen(str(self._m1)), 1)
+        tb.append(str(self._m1))
+        if self._prev_m1 != self._m1:
+            self._prev_m1 = self._m1
+            has_changes = True
+        return has_changes
+
+
+    def processEvent(self, event: Event) -> str:
+        if event.event_type == Event.EVENT_ROT_DEC:
+            self._m1 -= 1
+            if self._m1 < 0:
+                self._m1 = 9
+            buzz()
+            self._reset_timer_callback()
+        elif event.event_type == Event.EVENT_ROT_INC:
+            self._m1 += 1
+            if self._m1 > 9:
+                self._m1 = 0
+            buzz()
+            self._reset_timer_callback()
+        elif event.event_type == Event.EVENT_BTN_LONG_CLICK:
+            buzz()
+            return "Timer{}Select".format(self._clock_data.active_timer)
+        elif event.event_type == Event.EVENT_BTN_CLICK:
+            self._timer_min = self._m10 * 10 + self._m1
+            self._set_timer_val(self._timer_min, self._timer_sec)
+
+            self._reset_timer_callback()
+            buzz()
+            return "TimerSetSecond10"
+
+        return self.__class__.__name__
+
+
+
+
+
+
+
+
+class TimerSetSecond10(_EditCountdownState):
+    def __init__(self, display: Display, clock_data: ClockData) -> None:
+        super().__init__(display, clock_data)
+
+
+    def prepareView(self) -> bool:
+        has_changes = super().prepareView()
+        tb = Textbox(self._wri_time, self._time_y, self._minutes_start_x,
+                     self._wri_time.stringlen(str(self._s10)), 1)
+        tb.append(str(self._s10))
+        if self._prev_s10 != self._s10:
+            self._prev_s10 = self._s10
+            has_changes = True
+        return has_changes
+
+
+    def processEvent(self, event: Event) -> str:
+        if event.event_type == Event.EVENT_ROT_DEC:
+            self._s10 -= 1
+            if self._s10 < 0:
+                self._s10 = 5
+            buzz()
+            self._reset_timer_callback()
+        elif event.event_type == Event.EVENT_ROT_INC:
+            self._s10 += 1
+            if self._s10 > 5:
+                self._s10 = 0
+            buzz()
+            self._reset_timer_callback()
+        elif event.event_type == Event.EVENT_BTN_LONG_CLICK:
+            buzz()
+            return "Timer{}Select".format(self._clock_data.active_timer)
+        elif event.event_type == Event.EVENT_BTN_CLICK:
+            self._timer_sec = self._s10 * 10 + self._s1
+            self._set_timer_val(self._timer_min, self._timer_sec)
+
+            self._reset_timer_callback()
+            buzz()
+            return "TimerSetSecond1"
+
+        return self.__class__.__name__
+
+
+
+
+
+
+class TimerSetSecond1(_EditCountdownState):
+    def __init__(self, display: Display, clock_data: ClockData, rtc: DS1302) -> None:
+        super().__init__(display, clock_data)
+        self._rtc = rtc
+
+
+    def prepareView(self) -> bool:
+        has_changes = super().prepareView()
+        tb = Textbox(self._wri_time, self._time_y, self._minutes_start_x + self._wri_time.stringlen(str(self._s10)),
+                     self._wri_time.stringlen(str(self._s1)), 1)
+        tb.append(str(self._s1))
+        if self._prev_s1 != self._s1:
+            self._prev_s1 = self._s1
+            has_changes = True
+        return has_changes
+
+
+    def processEvent(self, event: Event) -> str:
+        if event.event_type == Event.EVENT_ROT_DEC:
+            self._s1 -= 1
+            if self._s1 < 0:
+                self._s1 = 9
+            buzz()
+            self._reset_timer_callback()
+        elif event.event_type == Event.EVENT_ROT_INC:
+            self._s1 += 1
+            if self._s1 > 9:
+                self._s1 = 0
+            buzz()
+            self._reset_timer_callback()
+        elif event.event_type == Event.EVENT_BTN_LONG_CLICK:
+            buzz()
+            return "Timer{}Select".format(self._clock_data.active_timer)
+        elif event.event_type == Event.EVENT_BTN_CLICK:
+            self._timer_sec = self._s10 * 10 + self._s1
+            self._is_timer_init = True
+            timer_val = self._set_timer_val(self._timer_min, self._timer_sec)
+            self._clock_data.timer_min_backup = 0
+            self._clock_data.timer_sec_backup = 0
+
+            offset = 3 * (self._clock_data.active_timer - 1)
+            for b in range(3):
+                self._rtc.ram(offset + b, timer_val >> (b * 8) & 0xFF)
+
+            self._reset_timer_callback()
+            buzz()
+            return "TimerStart"
+
+        return self.__class__.__name__
+
+

@@ -1,6 +1,7 @@
 
 from utime import ticks_diff, ticks_ms
 from micropython import const
+from DS1302 import DS1302
 import states, states_edit
 
 from machine import Timer
@@ -13,10 +14,11 @@ from bmp280 import BMP280
 class Clock():
     _ELEVATION = const(360)
 
-    def __init__(self, display:Display, clock_data: ClockData, temp_sensor: BMP280) -> None:
+    def __init__(self, display:Display, clock_data: ClockData, temp_sensor: BMP280, rtc: DS1302) -> None:
         self._clock_data = clock_data
         self._display = display
         self._temp_sensor = temp_sensor
+        self._rtc = rtc
         self._cur_state = None
         self._timeout_timer = Timer()
         self._time_refresh_timer = Timer()
@@ -44,10 +46,15 @@ class Clock():
 
 
     def _update_temperature(self) -> None:
-        pressure = self._temp_sensor.pressure
-        pressure_sl = (pressure/pow(1-360./44330, 5.255))/100.0
-        self._clock_data.temperature = "{:7.1f}".format(self._temp_sensor.temperature)
-        self._clock_data.pressure = "{:7.1f}".format(pressure_sl)
+        try:
+            pressure = self._temp_sensor.pressure
+            pressure_sl = (pressure/pow(1-360./44330, 5.255))/100.0
+            self._clock_data.temperature = "{:7.1f}".format(self._temp_sensor.temperature).replace(".", ",")
+            self._clock_data.pressure = "{:7.1f}".format(pressure_sl).replace(".", ",")
+        except:
+            self._clock_data.temperature = None
+            self._clock_data.pressure = None
+
 
 
     def _start_time_refresh_timer(self) -> None:
@@ -61,12 +68,12 @@ class Clock():
 
 
     def _handle_time_refresh(self, timer: Timer) -> None:
-        if not isinstance(self._cur_state, states.Normal):
+        if isinstance(self._cur_state, states_edit._EditTimeState):
             return # no update during setup
 
         ts = ticks_ms()
         self._update_temperature()
-        self._cur_state.initState(self._reset_timout_timer)
+        self._clock_data.from_rtc(self._rtc.DateTime())
 
         self._handle_state_change(self._cur_state.__class__.__name__)
         self._last_update_time = ticks_diff(ticks_ms(), ts)
@@ -75,13 +82,16 @@ class Clock():
 
     def _handle_timeout(self, timer: Timer) -> None:
         timer.deinit()
+        self._cur_state.handleTimeout()
         if self._cur_state._timeout_state_name is not None:
             self._handle_state_change(self._cur_state._timeout_state_name)
 
 
     def _reset_timout_timer(self) -> None:
         self._timeout_timer.deinit()
-        if self._cur_state._timeout_ms > 0:
+        if self._cur_state._timeout_ms > 0 \
+            and (not isinstance(self._cur_state, states_edit._EditTimeState) \
+                or self._clock_data.is_init): # No timeout during initial setup
             self._timeout_timer.init(mode=Timer.ONE_SHOT, period=self._cur_state._timeout_ms, callback=self._handle_timeout)
             # print("start timer:", self._cur_state._timeout_ms)
 
@@ -94,8 +104,8 @@ class Clock():
 
         if new_state is not self._cur_state:
             self._cur_state = new_state
-            self._reset_timout_timer()
             self._cur_state.initState(self._reset_timout_timer)
+            self._reset_timout_timer()
 
         update_display = self._cur_state.prepareView()
         if update_display:

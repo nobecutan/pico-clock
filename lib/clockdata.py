@@ -16,10 +16,13 @@ class ClockData:
         self.second = 0
         self.temperature = None
         self.pressure = None
-        self.battery = 100
+        self.battery = -1
         self.t1_duration = 0
         self.t2_duration = 0
         self.t3_duration = 0
+        self.active_timer = 0
+        self.timer_min_backup = 0
+        self.timer_sec_backup = 0
         self.is_init = False
 
     def from_rtc(self, rtc_tuple:Tuple[int, int, int, int, int, int, int]) -> bool:
