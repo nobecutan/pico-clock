@@ -42,4 +42,4 @@ rst = machine.Pin(20)
 busy = machine.Pin(21)
 
 gc.collect()  # Precaution before instantiating framebuf
-ssd = SSD(spi, cs, dc, rst, busy)  # Create a display instance
+display = SSD(spi, cs, dc, rst, busy)  # Create a display instance

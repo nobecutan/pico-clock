@@ -20,9 +20,9 @@ class ClockData:
         self.t1_duration = 0
         self.t2_duration = 0
         self.t3_duration = 0
-        self.active_timer = 0
-        self.timer_min_backup = 0
-        self.timer_sec_backup = 0
+        self.active_timer_selected = 0
+        self.active_timer_remaining = 0
+        self.timer_value_backup = 0
         self.is_init = False
 
     def from_rtc(self, rtc_tuple:Tuple[int, int, int, int, int, int, int]) -> bool:

@@ -164,7 +164,7 @@ class Writer():
             self._printchar('\n')
             self._printline(rstr, invert)  # Recurse
 
-    def stringlen(self, string, oh=False):
+    def stringlen(self, string, oh=False)->int:
         sc = self._getstate().text_col  # Start column
         wd = self.screenwidth
         l = 0
@@ -172,7 +172,7 @@ class Writer():
             _, _, char_width = self.font.get_ch(char)
             l += char_width
             if oh and l + sc > wd:
-                return True  # All done. Save time.
+                return 1  # All done. Save time.
         char = string[-1]
         _, _, char_width = self.font.get_ch(char)
         if oh and l + sc + char_width > wd:

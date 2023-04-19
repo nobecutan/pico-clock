@@ -47,7 +47,7 @@ class _EditTimeState(states._TimeState):
         self._m10 = cd.minute // 10
         self._m1 = cd.minute % 10
 
-        self._prev_display_data.day = -1 # Force view update at least once
+        self._prev_cd.day = -1 # Force view update at least once
 
 
     def prepareView(self) -> bool:
@@ -62,14 +62,14 @@ class _EditTimeState(states._TimeState):
         wr = self._wri_default
         wr.set_textpos(self._display, self._date_y, self._date_x_end - wr.stringlen(date))
         wr.printstring(date)
-        if self._prev_display_data.year != cd.year:
-            self._prev_display_data.year = cd.year
+        if self._prev_cd.year != cd.year:
+            self._prev_cd.year = cd.year
             has_changes = True
-        if self._prev_display_data.month != cd.month:
-            self._prev_display_data.month = cd.month
+        if self._prev_cd.month != cd.month:
+            self._prev_cd.month = cd.month
             has_changes = True
-        if self._prev_display_data.day != cd.day:
-            self._prev_display_data.day = cd.day
+        if self._prev_cd.day != cd.day:
+            self._prev_cd.day = cd.day
             has_changes = True
 
         return has_changes
@@ -94,14 +94,14 @@ class _EditCountdownState(states._CountdownState):
     def _set_timer_val(self, min: int, sec: int) -> int:
         cd = self._clock_data
         timer_val = min * 60 + sec
-        if cd.active_timer == 1:
+        if cd.active_timer_selected == 1:
             cd.t1_duration = timer_val
-        elif cd.active_timer == 2:
+        elif cd.active_timer_selected == 2:
             cd.t2_duration = timer_val
-        elif cd.active_timer == 3:
+        elif cd.active_timer_selected == 3:
             cd.t3_duration = timer_val
         else:
-            raise IndexError("active timer {:d} unsupported".format(cd.active_timer))
+            raise IndexError("active timer {:d} unsupported".format(cd.active_timer_selected))
 
         return timer_val
 
@@ -325,8 +325,8 @@ class SetYear(_EditTimeState):
 
         tb = Textbox(wr, self._date_y, start_x, wr.stringlen(part), 1)
         tb.append(part)
-        if self._prev_display_data.year != cd.year:
-            self._prev_display_data.year = cd.year
+        if self._prev_cd.year != cd.year:
+            self._prev_cd.year = cd.year
             has_changes = True
         return has_changes
 
@@ -372,8 +372,8 @@ class SetMonth(_EditTimeState):
 
         tb = Textbox(wr, self._date_y, start_x, wr.stringlen(part), 1)
         tb.append(part)
-        if self._prev_display_data.month != cd.month:
-            self._prev_display_data.month = cd.month
+        if self._prev_cd.month != cd.month:
+            self._prev_cd.month = cd.month
             has_changes = True
         return has_changes
 
@@ -426,8 +426,8 @@ class SetDay(_EditTimeState):
 
         tb = Textbox(wr, self._date_y, start_x, wr.stringlen(part), 1)
         tb.append(part)
-        if self._prev_display_data.day != cd.day:
-            self._prev_display_data.day = cd.day
+        if self._prev_cd.day != cd.day:
+            self._prev_cd.day = cd.day
             has_changes = True
         return has_changes
 
@@ -520,7 +520,7 @@ class TimerSetMinute10(_EditCountdownState):
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_BTN_LONG_CLICK:
             buzz()
-            return "Timer{}Select".format(self._clock_data.active_timer)
+            return "Timer{}Select".format(self._clock_data.active_timer_selected)
         elif event.event_type == Event.EVENT_BTN_CLICK:
             self._timer_min = self._m10 * 10 + self._m1
             self._set_timer_val(self._timer_min, self._timer_sec)
@@ -567,7 +567,7 @@ class TimerSetMinute1(_EditCountdownState):
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_BTN_LONG_CLICK:
             buzz()
-            return "Timer{}Select".format(self._clock_data.active_timer)
+            return "Timer{}Select".format(self._clock_data.active_timer_selected)
         elif event.event_type == Event.EVENT_BTN_CLICK:
             self._timer_min = self._m10 * 10 + self._m1
             self._set_timer_val(self._timer_min, self._timer_sec)
@@ -616,7 +616,7 @@ class TimerSetSecond10(_EditCountdownState):
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_BTN_LONG_CLICK:
             buzz()
-            return "Timer{}Select".format(self._clock_data.active_timer)
+            return "Timer{}Select".format(self._clock_data.active_timer_selected)
         elif event.event_type == Event.EVENT_BTN_CLICK:
             self._timer_sec = self._s10 * 10 + self._s1
             self._set_timer_val(self._timer_min, self._timer_sec)
@@ -664,7 +664,7 @@ class TimerSetSecond1(_EditCountdownState):
             self._reset_timer_callback()
         elif event.event_type == Event.EVENT_BTN_LONG_CLICK:
             buzz()
-            return "Timer{}Select".format(self._clock_data.active_timer)
+            return "Timer{}Select".format(self._clock_data.active_timer_selected)
         elif event.event_type == Event.EVENT_BTN_CLICK:
             self._timer_sec = self._s10 * 10 + self._s1
             self._is_timer_init = True
@@ -672,7 +672,7 @@ class TimerSetSecond1(_EditCountdownState):
             self._clock_data.timer_min_backup = 0
             self._clock_data.timer_sec_backup = 0
 
-            offset = 3 * (self._clock_data.active_timer - 1)
+            offset = 3 * (self._clock_data.active_timer_selected - 1)
             for b in range(3):
                 self._rtc.ram(offset + b, timer_val >> (b * 8) & 0xFF)
 

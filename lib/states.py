@@ -1,12 +1,9 @@
 from utime import sleep, ticks_diff, ticks_ms
 from machine import Pin, Timer
 from micropython import const, schedule
+from clock_view import ClockView
 
-import gui.fonts.arial_50 as huge_font
-import gui.fonts.freesans20 as small_font
 from clockdata import ClockData
-from drivers.display import Display
-from gui.core.writer import Writer
 from rotary import Event
 from DS1302 import DS1302
 
@@ -15,21 +12,13 @@ DEFAULT_TIMEOUT = 15000
 
 class _State():
 
-    def __init__(self, display: Display, clock_data: ClockData, timeout_ms: int = 0, timeout_state_name: str = None) -> None:
+    def __init__(self, clock_view: ClockView, clock_data: ClockData, timeout_ms: int = 0, timeout_state_name: str = None) -> None:
+        self._clock_view = clock_view
         self._clock_data = clock_data
         self._timeout_ms = timeout_ms
         self._timeout_state_name = timeout_state_name
-        self._prev_display_data = ClockData()
-        self._display = display
-        self._wri_default = Writer(self._display, small_font, False)
-        self._wri_time = Writer(self._display, huge_font, False)
         self._reset_timer_callback = lambda: None
 
-        self._header_y = const(5)
-        self._hdr_t1_x = const(13)
-        self._hdr_t2_x = const(39)
-        self._hdr_t3_x = const(70)
-        self._footer_y = const(175)
 
 
     def initState(self, reset_timer_callback: FunctionType) -> None:
@@ -46,79 +35,19 @@ class _State():
 
 
     def prepareView(self) -> bool:
-        self._display.clear()
-        cd = self._clock_data
-        wr = self._wri_default
-        wr.set_textpos(self._display, self._header_y, self._hdr_t1_x)
-        wr.printstring("T1")
-        wr.set_textpos(self._display, self._header_y, self._hdr_t2_x)
-        wr.printstring("T2")
-        wr.set_textpos(self._display, self._header_y, self._hdr_t3_x)
-        wr.printstring("T3")
-        self._display.hline(5, 26, 190, 1)
-        self._display.vline(36, 9, 13, 1)
-        self._display.vline(66, 9, 13, 1)
-        self._display.vline(96, 9, 13, 1)
+        return self._clock_view.draw_background(self._clock_data)
 
-        has_changes = False
-        if cd.battery >= 0:
-            wr.set_textpos(self._display, 5, 195 -
-                           wr.stringlen(str(cd.battery)))
-            wr.printstring(str(cd.battery))
-            if self._prev_display_data.battery != cd.battery:
-                has_changes = True
-                self._prev_display_data.battery = cd.battery
 
-        if cd.temperature is not None:
-            wr.set_textpos(self._display, self._footer_y, 5)
-            wr.printstring(cd.temperature)
-            if self._prev_display_data.temperature != cd.temperature:
-                has_changes = True
-                self._prev_display_data.temperature = cd.temperature
-            if cd.pressure is not None:
-                wr.set_textpos(self._display, self._footer_y, 195 -
-                               wr.stringlen(cd.pressure))
-                wr.printstring(cd.pressure)
-                if self._prev_display_data.pressure != cd.pressure:
-                    has_changes = True
-                    self._prev_display_data.pressure = cd.pressure
-            self._display.hline(5, 173, 190, 1)
-
-        return has_changes
 
 
 class _TimeState(_State):
-    def __init__(self, display: Display, clock_data: ClockData, timeout_ms: int = 0, timeout_state_name: str = None) -> None:
-        super().__init__(display, clock_data, timeout_ms, timeout_state_name)
-        self._hour_start_x = const(25)
-        self._minutes_start_x = const(108)
-        self._time_y = const(55)
-        self._date_y = const(110)
-        self._date_x_end = const(182)
+    def __init__(self, clock_view: ClockView, clock_data: ClockData, timeout_ms: int = 0, timeout_state_name: str = None) -> None:
+        super().__init__(clock_view, clock_data, timeout_ms, timeout_state_name)
 
 
     def prepareView(self) -> bool:
-        has_changes = super().prepareView()
+        return self._clock_view.draw_time(self._clock_data)
 
-        cd = self._clock_data
-        t_writer = self._wri_time
-        t_writer.set_textpos(self._display, 50, 91)
-        t_writer.printstring(":")
-        t_writer.set_textpos(self._display, self._time_y, self._hour_start_x)
-        t_writer.printstring("{:02d}".format(cd.hour))
-        t_writer.set_textpos(self._display, self._time_y,
-                             self._minutes_start_x)
-        t_writer.printstring("{:02d}".format(cd.minute))
-
-        if self._prev_display_data.hour != cd.hour:
-            has_changes = True
-            self._prev_display_data.hour = cd.hour
-
-        if self._prev_display_data.minute != cd.minute:
-            has_changes = True
-            self._prev_display_data.minute = cd.minute
-
-        return has_changes
 
 
 
@@ -126,8 +55,8 @@ class _TimeState(_State):
 
 
 class _CountdownState(_TimeState):
-    def __init__(self, display: Display, clock_data: ClockData, timeout_ms: int = 0, timeout_state_name: str = None) -> None:
-        super().__init__(display, clock_data, timeout_ms, timeout_state_name)
+    def __init__(self, clock_view: ClockView, clock_data: ClockData, timeout_ms: int = 0, timeout_state_name: str = None) -> None:
+        super().__init__(clock_view, clock_data, timeout_ms, timeout_state_name)
         self._timer_min = 0
         self._timer_sec = 0
         self._prev_timer_min = -1
@@ -137,14 +66,14 @@ class _CountdownState(_TimeState):
 
     def _get_timer_val(self) -> Tuple[int, int]:
         cd = self._clock_data
-        if cd.active_timer == 1:
+        if cd.active_timer_selected == 1:
             return (cd.t1_duration // 60, cd.t1_duration % 60)
-        elif cd.active_timer == 2:
+        elif cd.active_timer_selected == 2:
             return (cd.t2_duration // 60, cd.t2_duration % 60)
-        elif cd.active_timer == 3:
+        elif cd.active_timer_selected == 3:
             return (cd.t3_duration // 60, cd.t2_duration % 60)
         else:
-            raise IndexError("active timer {:d} unsupported".format(cd.active_timer))
+            raise IndexError("active timer {:d} unsupported".format(cd.active_timer_selected))
 
 
     def initState(self, reset_timer_callback: FunctionType) -> None:
@@ -154,39 +83,8 @@ class _CountdownState(_TimeState):
 
 
     def prepareView(self) -> bool:
-        has_changes = super(_TimeState, self).prepareView()
+        return self._clock_view.draw_countdown(self._clock_data)
 
-        cd = self._clock_data
-        t_writer = self._wri_time
-        t_writer.set_textpos(self._display, 50, 91)
-        t_writer.printstring(":")
-        t_writer.set_textpos(self._display, self._time_y, self._hour_start_x)
-        t_writer.printstring("{:02d}".format(self._timer_min))
-        t_writer.set_textpos(self._display, self._time_y, self._minutes_start_x)
-        t_writer.printstring("{:02d}".format(self._timer_sec))
-
-        time = "{:02d}:{:02d}".format(cd.hour, cd.minute)
-        wr = self._wri_default
-        wr.set_textpos(self._display, self._date_y, self._date_x_end - wr.stringlen(time))
-        wr.printstring(time)
-
-        if self._prev_display_data.hour != cd.hour:
-            self._prev_display_data.hour = cd.hour
-            has_changes = True
-
-        if self._prev_display_data.minute != cd.minute:
-            self._prev_display_data.minute = cd.minute
-            has_changes = True
-
-        if self._prev_timer_min != self._timer_min:
-            has_changes = True
-            self._prev_timer_min = self._timer_min
-
-        if self._prev_timer_sec != self._timer_sec:
-            has_changes = True
-            self._prev_timer_sec = self._timer_sec
-
-        return has_changes
 
 
 
@@ -194,21 +92,18 @@ class _CountdownState(_TimeState):
 
 
 class Init(_State):
-    def __init__(self, display: Display, clock_data: ClockData, rtc:DS1302) -> None:
-        super().__init__(display, clock_data)
+    def __init__(self, clock_view: ClockView, clock_data: ClockData, rtc:DS1302) -> None:
+        super().__init__(clock_view, clock_data)
 
         self._rtc = rtc
         self._is_drawn = False
 
 
     def prepareView(self) -> bool:
-        self._display.clear()
-
-        wr = self._wri_default
-        wr.set_textpos(self._display, 92, 20)
-        wr.printstring("Initialisierung...")
-
         was_drawn = self._is_drawn
+        if not was_drawn:
+            self._clock_view.draw_init_state(self._clock_data)
+
         self._is_drawn = True
         return not was_drawn
 
@@ -246,37 +141,20 @@ class Init(_State):
 
 
 class Normal(_TimeState):
-    def __init__(self, display: Display, clock_data: ClockData, rtc:DS1302) -> None:
-        super().__init__(display, clock_data)
+    def __init__(self, clock_view: ClockView, clock_data: ClockData, rtc:DS1302) -> None:
+        super().__init__(clock_view, clock_data)
 
         self._rtc = rtc
 
 
     def initState(self, reset_timer_callback: FunctionType) -> None:
         super().initState(reset_timer_callback)
-        self._prev_display_data.day = -1 # Force display update at least once
+        self._clock_view.force_update() # Force display update at least once
         self._clock_data.from_rtc(self._rtc.DateTime())
 
 
     def prepareView(self) -> bool:
-        has_changes = super().prepareView()
-
-        cd = self._clock_data
-        date = cd.get_date_str()
-        wr = self._wri_default
-        wr.set_textpos(self._display, self._date_y, self._date_x_end - wr.stringlen(date))
-        wr.printstring(date)
-        if self._prev_display_data.year != cd.year:
-            self._prev_display_data.year = cd.year
-            has_changes = True
-        if self._prev_display_data.month != cd.month:
-            self._prev_display_data.month = cd.month
-            has_changes = True
-        if self._prev_display_data.day != cd.day:
-            self._prev_display_data.day = cd.day
-            has_changes = True
-
-        return has_changes
+        return self._clock_view.draw_normal_state(self._clock_data)
 
 
     def processEvent(self, event: Event) -> str:
@@ -296,15 +174,15 @@ class Normal(_TimeState):
 
 
 class Timer1Select(_CountdownState):
-    def __init__(self, display: Display, clock_data: ClockData) -> None:
-        super().__init__(display, clock_data, DEFAULT_TIMEOUT, "Normal")
+    def __init__(self, clock_view: ClockView, clock_data: ClockData) -> None:
+        super().__init__(clock_view, clock_data, DEFAULT_TIMEOUT, "Normal")
 
         self._offset = const(0)
         self._is_drawn = False
 
 
     def initState(self, reset_timer_callback: FunctionType) -> None:
-        self._clock_data.active_timer = 1
+        self._clock_data.active_timer_selected = 1
         super().initState(reset_timer_callback)
 
         self._is_drawn = False
@@ -315,7 +193,7 @@ class Timer1Select(_CountdownState):
         has_changes = super().prepareView()
 
         wr = self._wri_default
-        wr.set_textpos(self._display, self._header_y, self._hdr_t1_x)
+        wr.set_textpos(self._fb, self._header_y, self._hdr_t1_x)
         wr.printstring("T1", invert=True)
 
         was_drawn = self._is_drawn
@@ -344,15 +222,15 @@ class Timer1Select(_CountdownState):
 
 
 class Timer2Select(_CountdownState):
-    def __init__(self, display: Display, clock_data: ClockData) -> None:
-        super().__init__(display, clock_data, DEFAULT_TIMEOUT, "Normal")
+    def __init__(self, clock_view: ClockView, clock_data: ClockData) -> None:
+        super().__init__(clock_view, clock_data, DEFAULT_TIMEOUT, "Normal")
 
         self._offset = const(3)
         self._is_drawn = False
 
 
     def initState(self, reset_timer_callback: FunctionType) -> None:
-        self._clock_data.active_timer = 2
+        self._clock_data.active_timer_selected = 2
         super().initState(reset_timer_callback)
 
         self._is_drawn = False
@@ -363,7 +241,7 @@ class Timer2Select(_CountdownState):
         has_changes = super().prepareView()
 
         wr = self._wri_default
-        wr.set_textpos(self._display, self._header_y, self._hdr_t2_x)
+        wr.set_textpos(self._fb, self._header_y, self._hdr_t2_x)
         wr.printstring("T2", invert=True)
 
         was_drawn = self._is_drawn
@@ -392,15 +270,15 @@ class Timer2Select(_CountdownState):
 
 
 class Timer3Select(_CountdownState):
-    def __init__(self, display: Display, clock_data: ClockData) -> None:
-        super().__init__(display, clock_data, DEFAULT_TIMEOUT, "Normal")
+    def __init__(self, clock_view: ClockView, clock_data: ClockData) -> None:
+        super().__init__(clock_view, clock_data, DEFAULT_TIMEOUT, "Normal")
 
         self._offset = const(6)
         self._is_drawn = False
 
 
     def initState(self, reset_timer_callback: FunctionType) -> None:
-        self._clock_data.active_timer = 3
+        self._clock_data.active_timer_selected = 3
         super().initState(reset_timer_callback)
 
         self._is_drawn = False
@@ -411,7 +289,7 @@ class Timer3Select(_CountdownState):
         has_changes = super().prepareView()
 
         wr = self._wri_default
-        wr.set_textpos(self._display, self._header_y, self._hdr_t3_x)
+        wr.set_textpos(self._fb, self._header_y, self._hdr_t3_x)
         wr.printstring("T3", invert=True)
 
         was_drawn = self._is_drawn
@@ -436,8 +314,8 @@ class Timer3Select(_CountdownState):
 
 
 class TimerBackSelect(_CountdownState):
-    def __init__(self, display: Display, clock_data: ClockData) -> None:
-        super().__init__(display, clock_data, DEFAULT_TIMEOUT, "Normal")
+    def __init__(self, clock_view: ClockView, clock_data: ClockData) -> None:
+        super().__init__(clock_view, clock_data, DEFAULT_TIMEOUT, "Normal")
 
         self._is_drawn = False
 
@@ -448,10 +326,10 @@ class TimerBackSelect(_CountdownState):
 
 
     def prepareView(self) -> bool:
-        self._display.clear()
+        self._fb.clear()
 
         wr = self._wri_default
-        wr.set_textpos(self._display, 92, 20)
+        wr.set_textpos(self._fb, 92, 20)
         wr.printstring("Back")
 
         was_drawn = self._is_drawn
@@ -477,34 +355,34 @@ class TimerBackSelect(_CountdownState):
 
 
 class TimerStart(_CountdownState):
-    def __init__(self, display: Display, clock_data: ClockData, countdown_timer: Timer, process_event_callback: FunctionType) -> None:
-        super().__init__(display, clock_data)
+    def __init__(self, clock_view: ClockView, clock_data: ClockData, countdown_timer: Timer, process_event_callback: FunctionType) -> None:
+        super().__init__(clock_view, clock_data)
 
         self._process_event_callback = process_event_callback
         self._countdown_timer = countdown_timer
         self._countdown_value = 0
-        self._display_update_ms = 680
+        self._fb_update_ms = 680
 
 
     def initState(self, reset_timer_callback: FunctionType) -> None:
         super().initState(reset_timer_callback)
 
         self._header_x = 0
-        if self._clock_data.active_timer == 1:
+        if self._clock_data.active_timer_selected == 1:
             self._header_x = self._hdr_t1_x
-        elif self._clock_data.active_timer == 2:
+        elif self._clock_data.active_timer_selected == 2:
             self._header_x = self._hdr_t2_x
-        elif self._clock_data.active_timer == 3:
+        elif self._clock_data.active_timer_selected == 3:
             self._header_x = self._hdr_t3_x
         else:
-            raise IndexError("Unexpected active timer value: {}".format(self._clock_data.active_timer))
+            raise IndexError("Unexpected active timer value: {}".format(self._clock_data.active_timer_selected))
 
         self._countdown_value = self._timer_min * 60 + self._timer_sec
 
         if self._countdown_value <= 0 or self._countdown_value >= 3600:
             raise ValueError("Countdown value must be between 1 and 3599 (is: {})".format(self._countdown_value))
 
-        self._display.init()
+        self._fb.init()
         self._countdown_timer.init(mode=Timer.ONE_SHOT, period=1000, callback=self._handle_countdown_timer)
 
 
@@ -514,28 +392,28 @@ class TimerStart(_CountdownState):
         self._timer_sec = self._countdown_value % 60
         if self._countdown_value <= 0:
             self.prepareView()
-            self._display.show()
+            self._fb.show()
             self._process_event_callback(None)
-        schedule(self._update_display, None)
+        schedule(self._update_fb, None)
         pass
 
 
-    def _update_display(self, any) -> None:
+    def _update_fb(self, any) -> None:
         ts = ticks_ms()
         self.prepareView()
-        self._display.show()
-        self._display.wait_until_ready()
-        self._display_update_ms = ticks_diff(ticks_ms(), ts)
+        self._fb.show()
+        self._fb.wait_until_ready()
+        self._fb_update_ms = ticks_diff(ticks_ms(), ts)
         if self._countdown_value > 0:
-            self._countdown_timer.init(mode=Timer.ONE_SHOT, period=(1000-self._display_update_ms), callback=self._handle_countdown_timer)
+            self._countdown_timer.init(mode=Timer.ONE_SHOT, period=(1000-self._fb_update_ms), callback=self._handle_countdown_timer)
 
 
     def prepareView(self) -> bool:
         super().prepareView()
 
         wr = self._wri_default
-        wr.set_textpos(self._display, self._header_y, self._header_x)
-        wr.printstring("T{}".format(self._clock_data.active_timer), invert=True)
+        wr.set_textpos(self._fb, self._header_y, self._header_x)
+        wr.printstring("T{}".format(self._clock_data.active_timer_selected), invert=True)
 
         return False # only countdown timer handler updates the display
 
@@ -555,8 +433,8 @@ class TimerStart(_CountdownState):
 
 
 class TimerAlarm(_CountdownState):
-    def __init__(self, display: Display, clock_data: ClockData, countdown_timer: Timer, process_event_callback: FunctionType, buzzer_pin: Pin, motor_pin: Pin = None) -> None:
-        super().__init__(display, clock_data)
+    def __init__(self, clock_view: ClockView, clock_data: ClockData, countdown_timer: Timer, process_event_callback: FunctionType, buzzer_pin: Pin, motor_pin: Pin = None) -> None:
+        super().__init__(clock_view, clock_data)
 
         self._process_event_callback = process_event_callback
         self._countdown_timer = countdown_timer
@@ -573,14 +451,14 @@ class TimerAlarm(_CountdownState):
         self._timer_sec = 0
 
         self._header_x = 0
-        if self._clock_data.active_timer == 1:
+        if self._clock_data.active_timer_selected == 1:
             self._header_x = self._hdr_t1_x
-        elif self._clock_data.active_timer == 2:
+        elif self._clock_data.active_timer_selected == 2:
             self._header_x = self._hdr_t2_x
-        elif self._clock_data.active_timer == 3:
+        elif self._clock_data.active_timer_selected == 3:
             self._header_x = self._hdr_t3_x
         else:
-            raise IndexError("Unexpected active timer value: {}".format(self._clock_data.active_timer))
+            raise IndexError("Unexpected active timer value: {}".format(self._clock_data.active_timer_selected))
 
         self._do_alarm(None)
 
@@ -609,11 +487,11 @@ class TimerAlarm(_CountdownState):
         super().prepareView()
 
         wr = self._wri_default
-        wr.set_textpos(self._display, self._header_y, self._header_x)
-        wr.printstring("T{}".format(self._clock_data.active_timer), invert=True)
+        wr.set_textpos(self._fb, self._header_y, self._header_x)
+        wr.printstring("T{}".format(self._clock_data.active_timer_selected), invert=True)
 
         msg = "Countdown finished"
-        wr.set_textpos(self._display, self._date_y, 100 - wr.stringlen(msg)//2)
+        wr.set_textpos(self._fb, self._date_y, 100 - wr.stringlen(msg)//2)
         wr.printstring(msg)
 
         was_drawn = self._is_drawn
